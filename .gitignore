@@ -1,0 +1,12 @@
+*.user
+[Oo]bj
+[Bb]in
+*.log
+*.suo
+*.nlp
+*.cache
+.idea/
+.vs/
+.config/
+/src/Tests/UnitTests/Coverage/
+*.dll.config

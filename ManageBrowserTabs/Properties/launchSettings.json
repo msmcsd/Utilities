@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "ManageBrowserTabs": {
+      "commandName": "Project",
+      "commandLineArgs": "-s"
+    }
+  }
+}
