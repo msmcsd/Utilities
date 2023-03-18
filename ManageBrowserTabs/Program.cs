@@ -17,18 +17,20 @@ namespace ManageBrowserTabs
         const int UIA_ValuePatternId = 10002;               // https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-controlpattern-ids
         const int UIA_LegacyIAccessiblePatternId = 10018;   // https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-controlpattern-ids
         const int UIA_ControlTypePropertyId = 30003;        // https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-automation-element-propids
+        const int UIA_NamePropertyId = 30005;               // https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-automation-element-propids
         const int UIA_EditControlTypeId = 50004;            // https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-controltype-ids
         const int UIA_TabItemControlTypeId = 50019;         // https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-controltype-ids
 
-        private static string urlFile = Path.Combine(Environment.GetEnvironmentVariable("USERPROFILE") + "\\Desktop", "urls.bat");
+        private static string urlFile = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "urls.bat");
 
         static void Main(string[] args)
         {
             if (args.Length == 0)
             {
-                Console.WriteLine($"{Assembly.GetExecutingAssembly().GetName().Name} [--save] [--open]\n");
+                Console.WriteLine($"{Assembly.GetExecutingAssembly().GetName().Name} [--save | --open] [--file]\n");
                 Console.WriteLine("  --save -s\tSave urls of open tabs in Chrome.");
                 Console.WriteLine("  --open -o\tOpen Run urls.bat to open Chrome with urls in the file.");
+                Console.WriteLine("  --file -f\tPath to the batch file to save.");
                 return;
             }
 
@@ -42,6 +44,17 @@ namespace ManageBrowserTabs
                 case "-o":
                     OpenChromeWithTabs();
                     break;
+                default:
+                    return;
+            }
+
+            if (args.Length >=3) 
+            {
+                string f = args[1].ToLower();
+                if (f == "-f" || f == "--file")
+                    urlFile = args[2];
+                else
+                    return;
             }
         }
 
@@ -71,21 +84,22 @@ namespace ManageBrowserTabs
             if (urls != null) SaveUrls(urls);
         }
 
-        static void SaveUrls(Dictionary<string, string> urls)
+        static void SaveUrls(List<TabInfo> tabs)
         {
-            if (urls == null)
+            if (tabs == null)
             {
                 Console.WriteLine("Url collection is null.");
                 return;
             }
 
             StringBuilder sb = new StringBuilder();
-            foreach (var url in urls)
+            foreach (var tab in tabs)
             {
-                if (!string.IsNullOrEmpty(url.Value))
+                if (!string.IsNullOrEmpty(tab.Url))
                 {
-                    sb.Append($"REM {url.Key}\n");
-                    sb.Append($"start https://{url.Value}\n\n");
+                    sb.Append($"REM {tab.TabName}\n");
+                    tab.Url = tab.Url.StartsWith("http") ? tab.Url : "https://" + tab.Url;
+                    sb.Append($"start {tab.Url}\n\n");
                 }
             }
 
@@ -96,7 +110,7 @@ namespace ManageBrowserTabs
             }
         }
 
-        static Dictionary<string, string> GeteOpenTabsUrls()
+        static List<TabInfo> GeteOpenTabsUrls()
         {
             Process[] mainChromes = Process.GetProcessesByName("chrome").Where(p => !string.IsNullOrEmpty(p.MainWindowTitle)).ToArray();
             if (mainChromes.Length == 0)
@@ -113,7 +127,7 @@ namespace ManageBrowserTabs
             IUIAutomationElementArray chromeTabCollection = chromeMainUIAElement.FindAll(TreeScope.TreeScope_Descendants, chromeTabCondition);
 
             IUIAutomationElement addressBarEditControl = null;
-            Dictionary<string, string> urls = new Dictionary<string, string>();
+            List<TabInfo> tabs = new List<TabInfo>();
 
             // Loop thru each tab to selet tab and get its url.
             for (int i = 0; i < chromeTabCollection.Length; i++)
@@ -129,34 +143,44 @@ namespace ManageBrowserTabs
                 Thread.Sleep(1000);
 
                 // Retrieve the URL
-                if (addressBarEditControl == null)
+                //if (addressBarEditControl == null)
                 {
                     addressBarEditControl = GetAddressBarEditControl(uiAutomation, chromeMainUIAElement);
                 }
+                //Thread.Sleep(500);
                 //IUIAutomationCondition getEditControl = uiAutomation.CreatePropertyCondition(UIA_ControlTypePropertyId, UIA_EditControlTypeId);
                 //IUIAutomationElement addressBarEditControl = chromeMainUIAElement.FindFirst(TreeScope.TreeScope_Descendants, getEditControl);
                 IUIAutomationValuePattern addressBar = (IUIAutomationValuePattern)addressBarEditControl.GetCurrentPattern(UIA_ValuePatternId);
                 if (addressBar.CurrentValue != "")
                 {
                     Console.WriteLine("URL found: " + addressBar.CurrentValue);
-                    urls.Add(tabName, addressBar.CurrentValue);
+                    tabs.Add(new TabInfo { TabName = tabName, Url = addressBar.CurrentValue });
                 }
                 else
                 {
+                    var color = Console.ForegroundColor;
+                    Console.ForegroundColor = ConsoleColor.Red;
                     Console.WriteLine($"URL not found for '{chromeTabCollection.GetElement(i).CurrentName}'");
-                    urls.Add(tabName, string.Empty);
+                    Console.ForegroundColor = color;
                 }
             }
 
-            return urls;
+            return tabs;
         }
 
         static IUIAutomationElement GetAddressBarEditControl(CUIAutomation uiAutomation, IUIAutomationElement chromeMainUIAElement)
         {
-            IUIAutomationCondition getEditControl = uiAutomation.CreatePropertyCondition(UIA_ControlTypePropertyId, UIA_EditControlTypeId);
+            //IUIAutomationCondition getEditControl = uiAutomation.CreatePropertyCondition(UIA_ControlTypePropertyId, UIA_EditControlTypeId);
+            IUIAutomationCondition getEditControl = uiAutomation.CreatePropertyCondition(UIA_NamePropertyId, "Address and search bar");
             IUIAutomationElement addressBarEditControl = chromeMainUIAElement.FindFirst(TreeScope.TreeScope_Descendants, getEditControl);
 
             return addressBarEditControl;
+        }
+
+        internal class TabInfo
+        {
+            public string TabName { get; set; }
+            public string Url { get; set; }
         }
     }
 }
